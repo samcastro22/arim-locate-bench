@@ -1,9 +1,8 @@
 # arim-locate-bench
 
-A prototype benchmark for ARIMLabs' internship application: given a
-codebase containing a real, documented vulnerability, can a frontier
+Small benchmark for evaluating frontier models on end-to-end vulnerability discovery and remediation in real-world codebases: given a codebase containing a real, documented vulnerability, can a frontier
 model **locate** and correctly fix it with no description of what's
-wrong — only the vulnerable code?
+wrong; only the vulnerable code?
 
 Built on [Harbor](https://github.com/laude-institute/harbor), the same
 framework behind ARIMLabs' `malware-bench` and the external
@@ -31,7 +30,7 @@ localized, giving a spread rather than a single data point.
 
 Every task is a real, independently-disclosed vulnerability at the exact
 commit before its real fix landed. That means the *validity* of the
-vulnerability itself is never something this benchmark is evaluating —
+vulnerability itself is never something this benchmark is evaluating;
 only the model's locate-and-fix behavior, and (separately) whether this
 benchmark's own Docker/scoring setup is correct. Ground truth for each
 task is the vulnerability's real, official fix commit.
@@ -46,8 +45,8 @@ task is the vulnerability's real, official fix commit.
 | [`picklescan_bypass`](tasks/picklescan_bypass/) | CVE-2025-1716 / GHSA-655q-fx9r-782v | [picklescan](https://github.com/mmaitre314/picklescan) | Deserialization-RCE detection bypass — a legitimate-looking call (`pip.main`) weaponized as a `__reduce__` payload |
 
 Two of the four (`scitokens_sqli`, `parsl_sqli`) are the same
-vulnerability *class* — SQL injection via unparameterized string
-building — in two different codebases with two different exact code
+vulnerability *class*  (SQL injection via unparameterized string
+building) in two different codebases with two different exact code
 patterns. That's deliberate: it tests whether a model's locate
 performance is a consistent skill or a one-off success on a single
 familiar pattern. The other two are different failure patterns entirely
@@ -100,14 +99,14 @@ advisory/fix commit for that CVE:
 Every one of the four scorers was validated **both** in isolated venvs
 against the pinned vulnerable commit (must fail) and the real upstream
 fix commit (must pass), and end-to-end inside the actual Harbor/Docker
-environment via `harbor run --agent oracle` — the core requirement for
+environment via `harbor run --agent oracle`; the core requirement for
 this prototype: a scoring script that gives a wrong verdict makes the
 whole task meaningless, regardless of anything else about the benchmark.
 
 Confirmed results (`harbor run -p tasks/<name> --agent oracle`, applying
 the real fix): all four tasks score `Mean: 1.000`. Confirmed the negative
 control too (`harbor run -p tasks/scitokens_sqli --agent nop`, leaving
-the vulnerable code untouched): `Mean: 0.000` — the verifier genuinely
+the vulnerable code untouched): `Mean: 0.000` The verifier genuinely
 discriminates, it isn't passing vacuously.
 
 Each task's reference fix is applied from a **local** patch file
