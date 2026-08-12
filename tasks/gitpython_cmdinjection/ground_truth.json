@@ -1,0 +1,45 @@
+{
+  "cve": "CVE-2026-42215",
+  "advisory": "GHSA-rpm5-65cw-6hj4",
+  "advisory_url": "https://github.com/gitpython-developers/GitPython/security/advisories/GHSA-rpm5-65cw-6hj4",
+  "repo": "https://github.com/gitpython-developers/GitPython",
+  "vulnerable_files": [
+    "git/cmd.py",
+    "git/repo/base.py",
+    "git/remote.py"
+  ],
+  "vulnerable_commit": "da545232d0401fb9fb7660f9ff67991996674dda",
+  "fix_commit": "142195888e713542189533a52cdfc333f05c3af6",
+  "fix_commit_url": "https://github.com/gitpython-developers/GitPython/commit/142195888e713542189533a52cdfc333f05c3af6",
+  "vulnerability_class": "CWE-184 (Incomplete List of Disallowed Inputs) -> CWE-78 (OS Command Injection)",
+  "description": "GitPython blocks dangerous git options like --upload-pack, --receive-pack, --exec, -u, -c, and --config by checking raw kwarg names in Git.check_unsafe_options(). But Git.transform_kwarg() later 'dashifies' underscore-form kwargs (upload_pack -> --upload-pack) when building the actual command line. Because check_unsafe_options() runs on the pre-dashified kwarg names, an underscore-spelled kwarg such as upload_pack (the normal, idiomatic Python spelling) sails through the check and is still turned into --upload-pack on the command line, invoking an attacker-controlled helper program during clone/fetch/pull/push -- even with the documented default allow_unsafe_options=False protection in place. The literal hyphenated spelling `{'upload-pack': ...}` is correctly blocked; only the underscore spelling is missed.",
+  "vulnerable_call_sites": [
+    {
+      "file": "git/repo/base.py",
+      "function": "Repo.clone_from",
+      "approx_line": 1387,
+      "role": "checks list(kwargs.keys()) against clone's unsafe-option list before the kwargs are dashified"
+    },
+    {
+      "file": "git/remote.py",
+      "function": "Remote.fetch / Remote.pull / Remote.push",
+      "approx_lines": "1070, 1124, 1197",
+      "role": "same pattern -- checks raw kwargs.keys() before dashification"
+    },
+    {
+      "file": "git/cmd.py",
+      "function": "Git.check_unsafe_options",
+      "approx_line": 948,
+      "role": "root cause: does substring/exact matching against un-normalized option names, so 'upload_pack' != 'upload-pack' never triggers the block"
+    },
+    {
+      "file": "git/cmd.py",
+      "function": "Git.transform_kwarg",
+      "approx_line": 1471,
+      "role": "the later, unrelated step that converts upload_pack -> --upload-pack -- this is where the bypassed value actually becomes the dangerous CLI flag"
+    }
+  ],
+  "fix_approach": "Canonicalize both the configured unsafe-option names and the incoming option/kwarg names through the same normalization (dashify + strip leading dashes + drop any '=value' suffix) before comparing, so 'upload_pack' and '--upload-pack' and 'upload-pack' are all recognized as the same option. GitPython's real fix added Git._canonicalize_option_name() and rewrote check_unsafe_options() to build a dict keyed by the canonical form and look up each incoming option by its canonical form.",
+  "notes": "This is a logic/timing gap, not a missing-sanitization bug: the safety check exists and is invoked, but it operates on data before a later normalization step changes its meaning. The fix must not simply add 'upload_pack' as another blocked literal (that would still miss e.g. -uVALUE or other forms) -- it needs to normalize consistently.",
+  "poc_source": "Adapted from the advisory's PoC: git/cmd.py's check_unsafe_options blocks {'upload-pack': helper} but Remote.fetch(upload_pack=helper) reaches and executes the helper program."
+}

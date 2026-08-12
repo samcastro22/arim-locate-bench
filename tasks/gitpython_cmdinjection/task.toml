@@ -1,0 +1,31 @@
+schema_version = "1.4"
+artifacts = []
+
+[task]
+name = "arim/gitpython_cmdinjection"
+version = "1.0.0"
+description = "Locate and fix the real command-injection bypass (CVE-2026-42215) in GitPython's unsafe-option check, given only the vulnerable files with no hint of what's wrong."
+keywords = ["security", "command-injection", "cve", "locate", "gitpython"]
+[[task.authors]]
+name = "ARIM Labs"
+
+[metadata]
+
+[verifier]
+timeout_sec = 600.0
+collect = []
+
+[verifier.env]
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 600.0
+os = "linux"
+mcp_servers = []
+
+[environment.env]
+
+[solution.env]

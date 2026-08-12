@@ -1,0 +1,137 @@
+From 142195888e713542189533a52cdfc333f05c3af6 Mon Sep 17 00:00:00 2001
+From: w <w@mac.lan>
+Date: Mon, 20 Apr 2026 23:29:50 -0400
+Subject: [PATCH] Block unsafe underscored git kwargs / Fix for
+ GHSA-rpm5-65cw-6hj4
+
+---
+ git/cmd.py          | 21 +++++++++++++--------
+ test/test_clone.py  |  2 ++
+ test/test_git.py    | 16 ++++++++++++++++
+ test/test_remote.py |  5 +++--
+ 4 files changed, 34 insertions(+), 10 deletions(-)
+
+diff --git a/git/cmd.py b/git/cmd.py
+index d5fbc7736..3a4b69572 100644
+--- a/git/cmd.py
++++ b/git/cmd.py
+@@ -944,6 +944,12 @@ def check_unsafe_protocols(cls, url: str) -> None:
+                 f"The `{protocol}::` protocol looks suspicious, use `allow_unsafe_protocols=True` to allow it."
+             )
+ 
++    @classmethod
++    def _canonicalize_option_name(cls, option: str) -> str:
++        """Normalize an option or kwarg name for unsafe-option checks."""
++        option_name = option.lstrip("-").split("=", 1)[0].split(None, 1)[0]
++        return dashify(option_name)
++
+     @classmethod
+     def check_unsafe_options(cls, options: List[str], unsafe_options: List[str]) -> None:
+         """Check for unsafe options.
+@@ -951,15 +957,14 @@ def check_unsafe_options(cls, options: List[str], unsafe_options: List[str]) ->
+         Some options that are passed to ``git <command>`` can be used to execute
+         arbitrary commands. These are blocked by default.
+         """
+-        # Options can be of the form `foo`, `--foo bar`, or `--foo=bar`, so we need to
+-        # check if they start with "--foo" or if they are equal to "foo".
+-        bare_unsafe_options = [option.lstrip("-") for option in unsafe_options]
++        # Options can be of the form `foo`, `--foo`, `--foo bar`, or `--foo=bar`.
++        canonical_unsafe_options = {cls._canonicalize_option_name(option): option for option in unsafe_options}
+         for option in options:
+-            for unsafe_option, bare_option in zip(unsafe_options, bare_unsafe_options):
+-                if option.startswith(unsafe_option) or option == bare_option:
+-                    raise UnsafeOptionError(
+-                        f"{unsafe_option} is not allowed, use `allow_unsafe_options=True` to allow it."
+-                    )
++            unsafe_option = canonical_unsafe_options.get(cls._canonicalize_option_name(option))
++            if unsafe_option is not None:
++                raise UnsafeOptionError(
++                    f"{unsafe_option} is not allowed, use `allow_unsafe_options=True` to allow it."
++                )
+ 
+     AutoInterrupt: TypeAlias = _AutoInterrupt
+ 
+diff --git a/test/test_clone.py b/test/test_clone.py
+index 768efbba6..653d50aa3 100644
+--- a/test/test_clone.py
++++ b/test/test_clone.py
+@@ -128,6 +128,7 @@ def test_clone_unsafe_options(self, rw_repo):
+ 
+             unsafe_options = [
+                 {"upload-pack": f"touch {tmp_file}"},
++                {"upload_pack": f"touch {tmp_file}"},
+                 {"u": f"touch {tmp_file}"},
+                 {"config": "protocol.ext.allow=always"},
+                 {"c": "protocol.ext.allow=always"},
+@@ -216,6 +217,7 @@ def test_clone_from_unsafe_options(self, rw_repo):
+ 
+             unsafe_options = [
+                 {"upload-pack": f"touch {tmp_file}"},
++                {"upload_pack": f"touch {tmp_file}"},
+                 {"u": f"touch {tmp_file}"},
+                 {"config": "protocol.ext.allow=always"},
+                 {"c": "protocol.ext.allow=always"},
+diff --git a/test/test_git.py b/test/test_git.py
+index da50fdfe8..24b60af9d 100644
+--- a/test/test_git.py
++++ b/test/test_git.py
+@@ -27,6 +27,7 @@
+ import ddt
+ 
+ from git import Git, GitCommandError, GitCommandNotFound, Repo, cmd, refresh
++from git.exc import UnsafeOptionError
+ from git.util import cwd, finalize_process
+ 
+ from test.lib import TestBase, fixture_path, with_rw_directory
+@@ -154,6 +155,21 @@ def test_it_transforms_kwargs_into_git_command_arguments(self):
+         res = self.git.transform_kwargs(**{"s": True, "t": True})
+         self.assertEqual({"-s", "-t"}, set(res))
+ 
++    def test_check_unsafe_options_normalizes_kwargs(self):
++        cases = [
++            (["upload_pack"], ["--upload-pack"]),
++            (["receive_pack"], ["--receive-pack"]),
++            (["exec"], ["--exec"]),
++            (["u"], ["-u"]),
++            (["c"], ["-c"]),
++            (["--upload-pack=/tmp/helper"], ["--upload-pack"]),
++            (["--config core.filemode=false"], ["--config"]),
++        ]
++
++        for options, unsafe_options in cases:
++            with self.assertRaises(UnsafeOptionError):
++                Git.check_unsafe_options(options=options, unsafe_options=unsafe_options)
++
+     _shell_cases = (
+         # value_in_call, value_from_class, expected_popen_arg
+         (None, False, False),
+diff --git a/test/test_remote.py b/test/test_remote.py
+index b1d686f05..0551060cf 100644
+--- a/test/test_remote.py
++++ b/test/test_remote.py
+@@ -827,7 +827,7 @@ def test_fetch_unsafe_options(self, rw_repo):
+             remote = rw_repo.remote("origin")
+             tmp_dir = Path(tdir)
+             tmp_file = tmp_dir / "pwn"
+-            unsafe_options = [{"upload-pack": f"touch {tmp_file}"}]
++            unsafe_options = [{"upload-pack": f"touch {tmp_file}"}, {"upload_pack": f"touch {tmp_file}"}]
+             for unsafe_option in unsafe_options:
+                 with self.assertRaises(UnsafeOptionError):
+                     remote.fetch(**unsafe_option)
+@@ -895,7 +895,7 @@ def test_pull_unsafe_options(self, rw_repo):
+             remote = rw_repo.remote("origin")
+             tmp_dir = Path(tdir)
+             tmp_file = tmp_dir / "pwn"
+-            unsafe_options = [{"upload-pack": f"touch {tmp_file}"}]
++            unsafe_options = [{"upload-pack": f"touch {tmp_file}"}, {"upload_pack": f"touch {tmp_file}"}]
+             for unsafe_option in unsafe_options:
+                 with self.assertRaises(UnsafeOptionError):
+                     remote.pull(**unsafe_option)
+@@ -966,6 +966,7 @@ def test_push_unsafe_options(self, rw_repo):
+             unsafe_options = [
+                 {
+                     "receive-pack": f"touch {tmp_file}",
++                    "receive_pack": f"touch {tmp_file}",
+                     "exec": f"touch {tmp_file}",
+                 }
+             ]

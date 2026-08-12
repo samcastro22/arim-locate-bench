@@ -1,0 +1,40 @@
+{
+  "cve": "CVE-2026-32714",
+  "advisory": "SQL injection in scitokens KeyCache via str.format() query building",
+  "repo": "https://github.com/scitokens/scitokens",
+  "vulnerable_file": "src/scitokens/utils/keycache.py",
+  "vulnerable_commit": "66b075c35da18f8364276553513a53c596b4b8e3",
+  "fix_commit": "3dba108853f2f4a6c0f2325c03779bf083c41cf2",
+  "fix_commit_url": "https://github.com/scitokens/scitokens/commit/3dba108853f2f4a6c0f2325c03779bf083c41cf2",
+  "vulnerability_class": "CWE-89 (SQL Injection)",
+  "description": "KeyCache builds SQLite queries by interpolating the caller-supplied `issuer` and `key_id` strings directly into the SQL text with str.format(), instead of using parameterized placeholders. An issuer or key_id such as \"x' OR '1'='1\" is interpreted as SQL rather than a literal value, allowing boolean-injection attacks (e.g. wiping the entire `keycache` table via a crafted DELETE, or reading rows belonging to a different issuer).",
+  "vulnerable_locations": [
+    {
+      "function": "addkeyinfo",
+      "approx_line": 83,
+      "snippet": "curs.execute(\"DELETE FROM keycache WHERE issuer = '{}' AND key_id = '{}'\".format(issuer, key_id))"
+    },
+    {
+      "function": "_addkeyinfo",
+      "approx_line": 97,
+      "snippet": "insert_key_statement = \"INSERT OR REPLACE INTO keycache VALUES('{issuer}', '{expiration}', '{key_id}', '{keydata}', '{next_update}')\"; curs.execute(insert_key_statement.format(...))"
+    },
+    {
+      "function": "_delete_cache_entry",
+      "approx_line": 140,
+      "snippet": "curs.execute(\"DELETE FROM keycache WHERE issuer = '{}' AND key_id = '{}'\".format(issuer, key_id))"
+    },
+    {
+      "function": "_add_negative_cache_entry",
+      "approx_line": 156,
+      "snippet": "insert_key_statement = \"INSERT OR REPLACE INTO keycache VALUES('{issuer}', ...)\"; curs.execute(insert_key_statement.format(...))"
+    },
+    {
+      "function": "getkeyinfo",
+      "approx_line": 217,
+      "snippet": "key_query = \"SELECT * FROM keycache WHERE issuer = '{issuer}'\" [+ \" AND key_id = '{key_id}'\"]; curs.execute(key_query.format(issuer=issuer, key_id=key_id))"
+    }
+  ],
+  "fix_approach": "Replace every .format()-built SQL string with a parameterized query using SQLite's '?' placeholders, passing issuer/key_id/etc. as a separate parameter list/tuple to cursor.execute() instead of interpolating them into the query text.",
+  "notes": "This is a multi-location fix: all 5 sites in the file build SQL via string interpolation and must all be converted, or injection remains reachable through whichever call path is missed."
+}

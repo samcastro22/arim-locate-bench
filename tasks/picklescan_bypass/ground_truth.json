@@ -1,0 +1,20 @@
+{
+  "cve": "CVE-2025-1716",
+  "advisory": "GHSA-655q-fx9r-782v",
+  "advisory_url": "https://github.com/advisories/GHSA-655q-fx9r-782v",
+  "repo": "https://github.com/mmaitre314/picklescan",
+  "vulnerable_file": "src/picklescan/scanner.py",
+  "vulnerable_commit": "25d753f4b9a27ce141a43df3bf88d731800593d9",
+  "fix_commit": "78ce704227c51f070c0c5fb4b466d92c62a7aa3d",
+  "fix_commit_url": "https://github.com/mmaitre314/picklescan/commit/78ce704227c51f070c0c5fb4b466d92c62a7aa3d",
+  "vulnerability_class": "CWE-502 (Deserialization of Untrusted Data), detection-evasion / incomplete denylist",
+  "description": "picklescan flags pickle opcodes that reference known-dangerous callables (os.system, subprocess.*, eval, exec, etc.) via the `_unsafe_globals` denylist in scanner.py. A pickle's __reduce__ can point at ANY importable callable, not just the ones on that list. pip.main() is a legitimate-looking function -- it looks like ordinary package management, not an attack primitive -- but it accepts an argv-style list and, with 'install <spec>', will fetch and run arbitrary attacker-controlled code (a malicious package's setup.py / build hooks) during deserialization. Because 'pip' was never added to _unsafe_globals, a pickle like pickle.dumps(Exploit()) where Exploit.__reduce__ returns (pip.main, (['install', 'evil-package', ...],)) scans clean, even though loading it achieves remote code execution.",
+  "vulnerable_location": {
+    "variable": "_unsafe_globals",
+    "approx_line": 96,
+    "detail": "dict mapping module name -> denylisted symbol(s) ('*' for all); does not contain an entry for the 'pip' module, so Global('pip', 'main') is never classified as SafetyLevel.Dangerous or Suspicious"
+  },
+  "fix_approach": "Add \"pip\": \"*\" to the _unsafe_globals dict so any reference to a pip module-level callable (including pip.main) is flagged as SafetyLevel.Dangerous, the same way os, subprocess, and the other command/code-execution-capable modules already are.",
+  "notes": "This is a 'legitimate-looking call, not obviously unsafe code' class of bug -- the fix isn't sanitizing dangerous syntax, it's recognizing that an allowlisted-by-omission, ordinary-looking API can be weaponized as an RCE primitive.",
+  "real_poc_reused": "tests/data/malicious16.pkl from the real fix commit -- a literal pickle-protocol-0 payload encoding Exploit.__reduce__() -> (pip.main, ['install', 'some_malicious_package', ...]) -- is reused byte-for-byte as the scoring fixture."
+}
