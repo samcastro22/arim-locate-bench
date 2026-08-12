@@ -120,6 +120,22 @@ way across all four). Harbor uploads each task's `solution/` directory
 into the container automatically before running `solve.sh`, so no
 Dockerfile changes were needed to make `fix.patch` reachable.
 
+### Network policy during the agent phase
+
+Every task sets `network_mode = "no-network"` on `[agent]` (and
+`[verifier]`) in `task.toml`, while `[environment]` stays `"public"`.
+This matters specifically for the "locate" claim: without it, a model
+could route around actually reviewing the code by just searching the web
+for the real CVE advisory and copying its fix, which would defeat the
+whole point of the locate condition (code only, no description). The
+`[environment]` baseline stays public because that governs the Docker
+*build* step (cloning each repo at its pinned commit), which happens
+before the agent phase and is unaffected by the agent/verifier
+overrides. Re-verified with `harbor run --agent oracle` after tightening
+this — all four tasks still score `Mean: 1.000` with the agent sandboxed
+off the network, confirming neither `solve.sh` nor `tests/test.sh`
+secretly depended on live network access.
+
 ## Running
 
 ```bash

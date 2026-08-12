@@ -14,11 +14,20 @@ name = "ARIM Labs"
 [verifier]
 timeout_sec = 600.0
 collect = []
+# Scoring runs entirely against code already installed in the image
+# (the PoC uses a local bare repo, no remote git host involved).
+network_mode = "no-network"
 
 [verifier.env]
 
 [agent]
 timeout_sec = 600.0
+# Cuts internet access while the model is solving the task, so it can't
+# route around the "locate" condition (no vuln description given) by
+# just searching for the CVE advisory instead of reviewing the code.
+# Does not affect the Docker build step, which happens before this
+# phase and needs network to clone the pinned upstream commit.
+network_mode = "no-network"
 
 [environment]
 network_mode = "public"
